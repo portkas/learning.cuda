@@ -33,7 +33,11 @@ int main() {
     int blockSize = 256;
     int numBlocks = (n + blockSize - 1) / blockSize;
     addVectors<<<numBlocks, blockSize>>>(a, b, c, n);
-
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        printf("CUDA Error: %s\n", cudaGetErrorString(err));
+    }
+    
     // Copy result back to host
     cudaMemcpy(c_host, c, n * sizeof(float), cudaMemcpyDeviceToHost);
 

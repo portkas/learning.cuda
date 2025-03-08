@@ -8,52 +8,35 @@ __global__ void bilateralFilterKernel(float *src, float *dst, int rows, int cols
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (row >= rows || col >= cols)
+    if (d < col && col < cols - d && row > d && row < rows - d)
     {
-        return;
+        int centerIndex = row * cols + col;
+
+        float sum_intensity = 0.0f;
+        float sum_weight = 0.0f;
+
+        for (int i = -d; i <= d; ++i)
+        {
+            for (int j = -d; j <= d; ++j)
+            {
+                int curRow = row + i;
+                int curCol = col + j;
+
+                if (curRow >= 0 && curRow < rows && curCol >= 0 && curCol < cols)
+                {
+                    int curIndex = curRow * cols + curCol;
+                    float intensity_diff = src[centerIndex] - src[curIndex];
+                    float space_diff = i * i + j * j;
+
+                    float weight = expf(-(intensity_diff * intensity_diff / (2 * sigma_color * sigma_color)) - ((float)space_diff / (2 * sigma_space * sigma_space)));
+                    sum_intensity += src[curIndex] * weight;
+                    sum_weight += weight;
+                }
+            }
+        }
+
+        dst[centerIndex] = sum_intensity / sum_weight;
     }
-
-    int centerIndex = row * cols + col;
-    dst[centerIndex] = 255;
-
-    // if (d < col && col < cols - d && row > d && row < rows - d)
-    // {
-    //     int centerIndex = row * cols + col;
-
-    //     float sum_intensity = 0.0f;
-    //     float sum_weight = 0.0f;
-
-    //     for (int i = -d; i <= d; ++i)
-    //     {
-    //         for (int j = -d; j <= d; ++j)
-    //         {
-    //             int curRow = row + i;
-    //             int curCol = col + j;
-
-    //             if (curRow >= 0 && curRow < rows && curCol >= 0 && curCol < cols)
-    //             {
-    //                 int curIndex = curRow * cols + curCol;
-    //                 float intensity_diff = src[centerIndex] - src[curIndex];
-    //                 float space_diff = i * i + j * j;
-
-    //                 float weight = expf(-(intensity_diff * intensity_diff / (2 * sigma_color * sigma_color)) - ((float)space_diff / (2 * sigma_space * sigma_space)));
-    //                 sum_intensity += src[curIndex] * weight;
-    //                 sum_weight += weight;
-    //             }
-    //         }
-    //     }
-
-    //     if (sum_weight > 0.0f)
-    //     {
-    //         // dst[centerIndex] = sum_intensity / sum_weight;
-    //         dst[centerIndex] = 255;
-    //     }
-    //     else
-    //     {
-    //         // dst[centerIndex] = src[centerIndex];
-    //         dst[centerIndex] = 111;
-    //     }
-    // }
 }
 
 void cuda_bilateralFilter(cv::Mat &src, cv::Mat &dst, int d, float sigma_color, float sigma_space)
@@ -83,16 +66,7 @@ void cuda_bilateralFilter(cv::Mat &src, cv::Mat &dst, int d, float sigma_color, 
 
     
     bilateralFilterKernel <<<blocks, threads>>> (dev_src, dev_dst, rows, cols, d, sigma_color, sigma_space);
-
-    float* h_src = new float[rows * cols];
-    cudaMemcpy(h_src, dev_dst, size, cudaMemcpyDeviceToHost);
-    for (int i = 0; i < 10; i++) {
-        std::cout << "c[" << i << "] = " << h_src[i] << std::endl;
-    }
-    delete[] h_src;
-
-    // cudaMemcpy((float *)dst.data, dev_dst, size, cudaMemcpyDeviceToHost);
-    cudaMemcpy((float *)dst.data, dev_src, size, cudaMemcpyDeviceToHost);
+    cudaMemcpy((float *)dst.data, dev_dst, size, cudaMemcpyDeviceToHost);
 
     cudaFree(dev_src);
     cudaFree(dev_dst);
